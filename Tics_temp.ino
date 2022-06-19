@@ -1,5 +1,13 @@
+// dependencias de OLED
+#include <Wire.h> // definir
+#include <Adafruit_GFX.h> // definir libreria grafica
+#include <Adafruit_SSD1306.h> // definir libreria de OLED
+#define ANCHO 128 // ancho de la pantalla
+#define ALTO 32 // alto de la pantalla
+#define OLED_RESET 4 // numero "aleatoreo" se usa solo para pantallas que tengan el boton
+Adafruit_SSD1306 oled(ANCHO, ALTO, &Wire, OLED_RESET); // setear parametros para el oled
 
-//dependencias DHT11
+// dependencias DHT11
 #include <DHT.h>
 #define DHTPIN 2 // pin a DHT11
 #define DHTTYPE DHT11 // definir tipo de modulo
@@ -10,20 +18,22 @@ DHT dht(DHTPIN, DHTTYPE); // enlaze pin y tipo
 #define RangoAnalogo 1024.0 // rango pin analogo 0 a 1023 
 #define PIN_LM35       A0 // pin a LM35
 
-//LEDS
+// LEDS
 const int LEDOK = 7;
 const int LEDNOK = 6;
 
 void setup() {
+  Wire.begin();
   Serial.begin(9600);
   dht.begin();
+  oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 }
 
 void loop() {
   // codigo sensor LM35 temperatura exterior
   float ValorLM35 = analogRead(PIN_LM35); // rango del sensor
   float milliVolt = ValorLM35 * (VoltajeLM35 / RangoAnalogo);// convertir rango a voltaje
-  int tempC = ((milliVolt / 10)- 32)* 5/9 ;// convertir voltaje a C int para entero
+  int tempC = (milliVolt / 10) ;// convertir voltaje a C int para entero
 
   // codigo sensor DHT11 temperatura y humedad interior
   float humedad = dht.readHumidity(); // Humedad interior
@@ -42,6 +52,17 @@ void loop() {
   else
     digitalWrite(LEDNOK, LOW);
   
+  // Impresion por pantalla
+  oled.clearDisplay();
+  oled.setTextColor(WHITE);
+  oled.setCursor(0,0);
+  oled.setTextSize(1);
+  oled.print("Temp. Ext:");
+  oled.setCursor(65,0);
+  oled.setTextSize(1);
+  oled.print(tempC);
+  oled.display();
+
   // Impresion Temp Exterior
   Serial.print("Temperatura exterior: ");
   Serial.print(tempC);   // print the temperature in Celsius
