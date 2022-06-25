@@ -3,7 +3,7 @@
 #include <Adafruit_GFX.h> // definir libreria grafica
 #include <Adafruit_SSD1306.h> // definir libreria de OLED
 #define ANCHO 128 // ancho de la pantalla
-#define ALTO 32 // alto de la pantalla
+#define ALTO 64 // alto de la pantalla
 #define OLED_RESET 4 // numero "aleatoreo" se usa solo para pantallas que tengan el boton
 Adafruit_SSD1306 oled(ANCHO, ALTO, &Wire, OLED_RESET); // setear parametros para el oled
 
@@ -61,7 +61,15 @@ void loop() {
   oled.setCursor(65,0);
   oled.setTextSize(1);
   oled.print(tempC);
-  oled.display();
+
+  oled.setCursor(0,10);
+  oled.setTextSize(1);
+  oled.print("Temp. Int:");
+  oled.setCursor(65,60);
+  oled.setTextSize(1);
+  oled.print(tempCint);
+
+   oled.display();
 
   // Impresion Temp Exterior
   Serial.print("Temperatura exterior: ");
