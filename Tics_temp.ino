@@ -9,7 +9,7 @@ Adafruit_SSD1306 oled(ANCHO, ALTO, &Wire, OLED_RESET); // setear parametros para
 
 // dependencias DHT11
 #include <DHT.h>
-#define DHTPIN 2 // pin a DHT11
+#define DHTPIN 10 // pin a DHT11
 #define DHTTYPE DHT11 // definir tipo de modulo
 DHT dht(DHTPIN, DHTTYPE); // enlaze pin y tipo
 
@@ -19,69 +19,180 @@ DHT dht(DHTPIN, DHTTYPE); // enlaze pin y tipo
 #define PIN_LM35       A0 // pin a LM35
 
 // LEDS
-const int LEDOK = 7;
-const int LEDNOK = 6;
+const int LEDOK = 7; // Led verde
+const int LEDNOK = 6; // Led rojo
 
-void setup() {
-  Wire.begin();
-  Serial.begin(9600);
-  dht.begin();
-  oled.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+// dependencias del caudalimetro
+volatile int NumPulsos; // variable para la cantidad de pulsos recibidos
+int PinCaudalimetro = 2;    // Sensor conectado en el pin 2 analogo
+float factor_conversion = 4.8; // para convertir de frecuencia a caudal (ver en el datasheet)
+int IntervaloMedicion = 2500; // Tiempo con el que se calculara el consumo
+float Volumen = 0; // Consumo en Litros
+long dt = 0; // variacion de tiempo por loop
+long t0 = 0; // millis () del loop anterior
+
+// Funcion que se activa durante la interrupcion
+void ContarPulsos ()
+{ 
+  NumPulsos++;  //incrementamos la variable de pulsos
+} 
+
+// Funcion para obtener la frecuencia
+float ObtenerFrecuencia() 
+{
+  // Codigo Caudalimetro
+  float frecuencia; // Declarar arreglo 0=Frecuencia 1=TemperaturaExterior 2=Humedad 3=TemperaturaInterior
+  NumPulsos = 0;   // Reset a 0 el número de pulsos
+  interrupts();    // Habilitar las interrupciones
+  delay(2000);   // muestra de 2 segundo
+  noInterrupts(); // Deshabilitar las interrupciones
+  frecuencia = NumPulsos/2; // Hz(pulsos por segundo)
+
+  return frecuencia;
 }
 
-void loop() {
+// Funcion para obtener temperatura exterior
+float ObtenerTemperaturaLM() 
+{
   // codigo sensor LM35 temperatura exterior
   float ValorLM35 = analogRead(PIN_LM35); // rango del sensor
   float milliVolt = ValorLM35 * (VoltajeLM35 / RangoAnalogo);// convertir rango a voltaje
-  int tempC = (milliVolt / 10) ;// convertir voltaje a C int para entero
+  int tempC = (milliVolt / 10);// convertir voltaje a C int para entero 
 
-  // codigo sensor DHT11 temperatura y humedad interior
-  float humedad = dht.readHumidity(); // Humedad interior
-  float tempCint = dht.readTemperature(); // Temperatura interior
+  return tempC;
+}
 
-  //LEDs de estado
-    digitalWrite(LEDNOK, LOW); // defecto LED rojo OFF
-    
-  if(tempCint > 50) // Si temp supera, apagar led verde
-    digitalWrite(LEDOK, LOW);
-  else
-    digitalWrite(LEDOK, HIGH);
-
-  if(tempCint > 50) // Si temp supera prender led rojo
-    digitalWrite(LEDNOK, HIGH);
-  else
-    digitalWrite(LEDNOK, LOW);
-  
-  // Impresion por pantalla
+// Funcion impresion OLED
+void pantalla(float tempCext, float tempCint, float humedad, float caudal_L_h, float Volumen)
+{
+   // Impresion en pantalla
   oled.clearDisplay();
+  
   oled.setTextColor(WHITE);
   oled.setCursor(0,0);
   oled.setTextSize(1);
   oled.print("Temp. Ext:");
   oled.setCursor(65,0);
   oled.setTextSize(1);
-  oled.print(tempC);
+  oled.print(tempCext);
 
   oled.setCursor(0,10);
   oled.setTextSize(1);
   oled.print("Temp. Int:");
-  oled.setCursor(65,60);
+  oled.setCursor(65,10);
   oled.setTextSize(1);
   oled.print(tempCint);
 
-   oled.display();
+  oled.setCursor(0,20);
+  oled.setTextSize(1);
+  oled.print("Humedad (%):");
+  oled.setCursor(72,20);
+  oled.setTextSize(1);
+  oled.print(humedad/100);
 
-  // Impresion Temp Exterior
+  oled.setCursor(0,30);
+  oled.setTextSize(1);
+  oled.print("Flujo (L/h):");
+  oled.setCursor(72,30);
+  oled.setTextSize(1);
+  oled.print(caudal_L_h);
+
+  oled.setCursor(0,40);
+  oled.setTextSize(1);
+  oled.print("Consumo (L):");
+  oled.setCursor(0,50);
+  oled.setTextSize(2);
+  oled.print(Volumen);
+
+  oled.display();
+  delay(500);
+  oled.clearDisplay();
+}
+
+// Funcion Inicializadora
+void setup()
+{ 
+  Wire.begin(); // Iniciar libreria de OLED
+  Serial.begin(9600); // Iniciar linea de datos
+  dht.begin(); // Iniciar libreria sensor DHT11
+  pinMode(PinCaudalimetro, INPUT); // Iniciar el Pin Analogo del caudalimetro como input
+  attachInterrupt(0,ContarPulsos,RISING); //(Interrupcion 0(Pin2),funcion,Flanco de subida)
+  t0 = millis();
+  oled.begin(SSD1306_SWITCHCAPVCC, 0X3C); // Iniciar OLED (Tipo de alimentacion, ID de la pantalla)
+  oled.clearDisplay();
+} 
+
+// "Main"
+void loop ()    
+{
+
+  // Calculo caudalimetro
+  float frecuencia = ObtenerFrecuencia(); //obtener la Frecuencia de los pulsos en Hz
+  float caudal_L_m = frecuencia/factor_conversion; //calcular el caudal en Litros por minuto
+  float caudal_L_h = caudal_L_m*60; //calcular el caudal en Litros por hora
+  dt = millis()-t0; // calcular variacion en el tiempo desde ultima medida
+  t0 = millis(); // setear nuevo tiempo
+  Volumen = Volumen + (caudal_L_m/60) * (dt/1000); // Volumen (Litros) = caudal * tiempo en segundos
+
+  // LLamado a los datos
+  float tempCext = ObtenerTemperaturaLM();
+
+  // declaracion de datos
+  float tempCint;
+  float humedad;
+  
+  // Parce Verificador de DHT11
+  if (isnan(dht.readTemperature()))
+  {
+    tempCint = tempCint;
+    humedad = humedad;
+  } else
+  {
+    tempCint = dht.readTemperature();
+    humedad = dht.readHumidity();
+  }
+
+  // LEDs de estado
+  digitalWrite(LEDNOK, LOW); // defecto LED rojo OFF
+    
+  if(tempCint > 50) // Si temp supera apagar led verde
+  {
+    digitalWrite(LEDOK, LOW);
+  } else
+  {
+    digitalWrite(LEDOK, HIGH);
+  }
+
+  if(tempCint > 50) // Si temp supera prender led rojo
+  {
+    digitalWrite(LEDNOK, HIGH);
+  } else
+  {
+    digitalWrite(LEDNOK, LOW);
+  }
+
+  // Llamar a funcion imprimir
+  pantalla(tempCext, tempCint, humedad, caudal_L_h, Volumen);
+
+  // Impresion Caudal y consumo
+  Serial.print ("Consumo: "); 
+  Serial.print (Volumen); 
+  Serial.print ("Litros\tCaudal: "); 
+  Serial.print (caudal_L_m,3); 
+  Serial.print (" L/m\t"); 
+  Serial.print (caudal_L_h,3); 
+  Serial.println ("L/h"); 
+
+    // Impresion Temp Exterior
   Serial.print("Temperatura exterior: ");
-  Serial.print(tempC);   // print the temperature in Celsius
+  Serial.print(tempCext);   // Temperatura exterior
   Serial.println("°C");
 
   // Impresion Temp y Humedad interior
   Serial.print("Temperatura interior: ");
   Serial.print(tempCint + 2);
+  Serial.print(" °C");
   Serial.print("   ~   ");
   Serial.print("Humedad: ");
   Serial.println(humedad);
-
-  delay(1000);
 }
