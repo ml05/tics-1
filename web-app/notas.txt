@@ -1,1 +1,13 @@
+hola.php?tempext=15&tempint=14&humedad=24&frec=0&caudal=0&consumo=12
+
+el arduino envia un get
+
+por ejemplo     $tempExterior = $_GET['tempext']
+
+tempext
+tempint
+humedad
+frec
+caudal
+consumo
 
